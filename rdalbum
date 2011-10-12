@@ -1,0 +1,309 @@
+#!/bin/sh
+#
+# Copyright (c) 2011 recycler
+# All rights reserved.
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# THIS SOFTWARE IS PROVIDED BY recycler AND CONTRIBUTORS
+# ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+#  rdalbum is a shell script that generates a simple web album from image 
+#  directories -  inspired by genethumb - but not invented here :-)
+#
+#  Directory layout:
+#  ./
+#    this script
+#    main index.html
+#    subdir/
+#           index.html
+#           subdir.zip
+#           img/
+#               fubar.jpg
+#           prev/
+#                tn_fubar.jpg
+#                prev_fubar.jpg
+#    subdir2/
+#            ....
+#
+#  Depends on ImageMagick, jhead
+
+# VARS
+
+DEBUG=:
+SITE_TITLE="My RdAlbum"
+ITEMS="Images"
+OVERVIEWTEXT="Overview"
+PREVIEWTEXT="Preview"
+DOWNLOADTEXT="Full Size<br>(right click to save)"
+ZIPTEXT="Download all ${ITEMS} as .zip"
+export TZ="CET"
+DATE=`date`
+FOOTERTEXT="made with <a href=\"https://github.com/recycler/rdalbum\">rdalbum</a> - ${DATE}"
+INDEX="index.html"
+TNSIZE="220"
+PREVSIZE="640"
+PREVDIR=prev
+IMGDIR=img
+
+#override VARS in .rdconfig
+
+[ -f "./.rdconfig" ] && . ./.rdconfig && echo "config found"
+
+# FUNCTIONS
+
+debug() { [ ${DEBUG} ] && echo ":: $@"; }
+
+ex() { echo $@; exit 1; }
+
+html_header() {
+    TITLE=""
+    debug "HEADER: ${1} | ${2}"
+    cat > "${1}" <<EOH
+<!DOCTYPE html>
+<html>
+   <head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
+    <title>${2}</title>
+    <style type="text/css">
+      img { border: 0; margin:0; }
+      body { 
+            background: white; color: black;
+            font-family: sans-serif, Arial, Helvetica;
+            font-size: 12pt; 
+            margin-top: 30pt; 
+            margin-left: 50pt; 
+            margin-right: 50pt; }
+      h2 {  color: black; 
+            background: white; 
+            font-size: 18pt; 
+            border-bottom: 1px solid; 
+            border-bottom-color: #e89222; }
+      div#mmain { width:100%; padding:5px; margin:0px auto; }
+      div#left {   float:left;  z-index:2; margin: 0; }
+      div#right {  min-height:100px; margin-left:660px;  }
+      div#mright {  margin-left:260px;  }
+      div#clear { clear:both;  }
+      #left img { margin-bottom:7px; }
+      div#exif { margin-left:660px; background-color: #f3f3f3; padding:2px; z-index:2;}
+      pre#exif { 
+            font-size: 7pt; 
+            border-bottom: 1px dotted; 
+            border-bottom-color: #e89222; 
+            border-top: 1px dotted; 
+            border-top-color: #e89222;  }
+      #text { font-size: 10pt; }
+      small { font-size: 8pt; }
+      p#foot { text-align:right; color:grey; font-size: 7pt; border-top: 1px solid; border-top-color: #e89222; }
+      a { text-decoration:none; color:#000;}
+      a:link { text-decoration:none; }
+      a:visited { text-decoration:none; }
+      a:hover { text-decoration:none;  color:#e89222; }
+      a:active { text-decoration:none; color:#e89222; }
+      a:focus { text-decoration:none; }
+      .thumbnail {
+            float: left;
+            min-width: 100px;
+            margin: 0 15px 15px 0;
+            padding: 5px;
+            background-color: #f3f3f3; }
+      .thumbnail h4 { border-bottom: 1px dotted #e89222; margin: 2px; }
+      .thumbnail p { margin: 2px; font-size: 10pt; }
+      .clearboth { clear: both; }
+    </style>
+   </head>
+  <body>
+EOH
+}
+
+html_footer() {
+    debug "FOOTER: ${1}"
+    cat >> ${1} <<EOF
+    <p id="foot">${FOOTERTEXT}</p>
+  </body>
+</html>
+EOF
+}
+
+process_images() {
+    debug "PROC_IMG ${1}"
+    [ ! -d "${1}/${IMGDIR}" ] && ex "no image dir"
+    [ ! -d "${1}/${PREVDIR}" ] && mkdir "${1}/${PREVDIR}" && debug "${1}/${PREVDIR} created"
+    #IMGLIST=`find "${1}/${IMGDIR}" -type f -print`
+    IMGLIST=`find "${1}/${IMGDIR}" -type f -exec echo "{}" \;|sort`
+    debug "${IMGLIST}"
+    if [ -z "${IMGLIST}" ]
+    then
+        ex "no files to process"
+    else
+        for file in ${IMGLIST}
+        do
+            FILE=`basename "${file}"`
+            debug "file: ${FILE}"
+            TNFILE="${1}/${PREVDIR}/tn_${FILE}"
+            debug "tn  : ${TNFILE}"
+            PREVFILE="${1}/${PREVDIR}/prev_${FILE}"
+            debug "prev: ${PREVFILE}"
+            HISTFILE="${1}/${PREVDIR}/hist_${FILE}"
+            debug "hist: ${HISTFILE}"
+            if [ ! -f "${TNFILE}" ]
+            then
+                convert -geometry ${TNSIZE} "$file" "${TNFILE}" || ex "error $*"
+            else
+                debug "${TNFILE} exists"
+            fi
+            if [ ! -f "${HISTFILE}" ]
+            then
+                convert "$file" -define histogram:unique-colors=false histogram:"${HISTFILE}"
+            else
+                debug "${TNFILE} exists"
+            fi
+            if [ ! -f "${PREVFILE}" ]
+            then
+                convert -geometry ${PREVSIZE} "$file" "${PREVFILE}"
+            else
+                debug "${PREVFILE} exists"
+            fi
+        done
+    fi
+}
+
+generate_zip() {
+    debug GEN_ZIP ${1}
+    ZIPFILE="${1}/${1}.zip"
+    debug ${ZIPFILE}
+    if [ ! -f ${ZIPFILE} ]
+    then
+        zip ${ZIPFILE} ${1}/img/*
+    else
+        debug "${ZIPFILE} exists"
+    fi
+}
+
+generate_html() {
+    debug GEN_HTML ${1}
+    IMGLIST=`find ${1}/${IMGDIR} -type f -print|sort`
+    debug "${IMGLIST}"
+    html_header "${1}/${INDEX}" "${1} ${SITE_TITLE}"
+    echo "   <h2><a href=\"../\">${SITE_TITLE}</a> > ${1}</h2>" >> ${1}/${INDEX}
+#echo "<div id=\"pmain\">" >> ${1}/${INDEX}
+    for image in ${IMGLIST}
+    do
+        IMAGENAME=`basename ${image}`
+        HTMLLINK="${IMAGENAME}.html"
+        HTMLFILE="${1}/${IMAGENAME}.html"
+        debug "imagename: ${IMAGENAME} htmlfile: ${HTMLFILE} "
+        echo "     <div class=\"thumbnail\" id=\"${IMAGENAME}\">
+                     <a href=\"${HTMLLINK}\"> <img src=\"${PREVDIR}/tn_${IMAGENAME}\"></a>
+                     <h4><a href=\"${HTMLLINK}\">${IMAGENAME}</a></h4>
+                     <p> <a href=\"${HTMLLINK}\">${PREVIEWTEXT}</a>
+                     <a href=\"${IMGDIR}/${IMAGENAME}\">${DOWNLOADTEXT}</a> </p>
+                   </div>" >> ${1}/${INDEX}
+        html_header "${HTMLFILE}" "${1} ${IMAGENAME}"
+        echo " <h2><a href=\"../\">${SITE_TITLE}</a> > <a href=\"./${INDEX}#${IMAGENAME}\">${1}</a> > ${IMAGENAME}</h2>" >>  ${HTMLFILE}
+        echo " <div id=\"main\">
+                  <div id=\"left\">
+                    <img src=\"${PREVDIR}/prev_${IMAGENAME}\">
+                  </div>
+                  <div id=\"right\">
+                          <h3><a href=\"./${INDEX}#${IMAGENAME}\">${OVERVIEWTEXT}</a></h3>
+                          <p id=\"text\">
+                        <br><a href=\"${IMGDIR}/${IMAGENAME}\">${DOWNLOADTEXT}</a>
+                            </p> 
+                  </div>
+                  <div id=\"exif\"> 
+                        <h3>Exif data</h3>
+                        <pre id=\"exif\">
+                     " >>  ${HTMLFILE}
+        jhead ${image} >> ${HTMLFILE}
+        echo "          </pre>
+                  </div>
+              </div>
+</div><div id=\"clear\">
+" >> ${HTMLFILE}
+        html_footer "${HTMLFILE}"
+    done
+    echo "</div><div id=\"clear\">" >> ${1}/${INDEX}
+    html_footer "${1}/${INDEX}"
+}
+
+main_index() {
+    debug MAIN_INDEX
+    html_header "./${INDEX}" "${SITE_TITLE}"
+    DIRLIST=`find . -maxdepth 1 -type d -print|xargs ls -1rtd`
+    debug "${DIRLIST}"
+    echo "   <h2>${SITE_TITLE}</h2>" >> ${INDEX}
+    for folder in ${DIRLIST}
+    do
+        case ${folder} in
+            .*git|.)
+                debug "ignore .dot folder: ${folder}"
+                ;;
+            *)
+                previmg=`find ${folder}/${PREVDIR} -name "tn_*" -print | sort | head -1`
+                debug "previmg: ${previmg}"
+                [ -z "${previmg}" ] && continue
+                topimg=`find ${folder}/${IMGDIR} -type f -print | sort | head -1`
+                createtime=`/usr/bin/stat -f "%Sc" ${topimg}`
+                modtime=`/usr/bin/stat -f "%Sm" ${topimg}`
+                debug "topimg create: ${createtime} ${topimg}"
+                debug "topimg mod: ${modtime} ${topimg}"
+                imgcount=`ls -1 ${folder}/${IMGDIR} | /usr/bin/wc -l`
+                debug "count: $imgcount"
+                zipsize=`ls -lh ${folder}/${folder}.zip|awk '{print $5}'`
+                debug "zip: $zipsize"
+                echo " \
+       <div id=\"mmain\">
+         <div id=\"left\">
+           <a href=\"${folder}/${INDEX}\">
+           <img src=\"${previmg}\">
+           </a>
+         </div>
+         <div id=\"mright\">
+           <h3><a href=\"${folder}/${INDEX}\">`echo ${folder}|sed 's/.\///'`</a></h3>
+           <p id=\"text\">${imgcount} ${ITEMS}
+           <br>
+           <small>${modtime}</small>
+           <br>
+           <a href=\"${folder}/${INDEX}\">${OVERVIEWTEXT}</a> 
+           <br><a href=\"${folder}/${folder}.zip\">${ZIPTEXT}</a> ($zipsize)
+           </p>
+         </div>
+       </div>
+       <div id=\"clear\">
+       </div>" >> ${INDEX}
+                ;;
+        esac
+    done
+    html_footer "./${INDEX}"
+}
+
+# MAIN
+
+[ -z "${1}" ] && ex "need workdir"
+WRKD=`echo "${1}"|sed 's/\///g'`
+debug "${WRKD}"
+[ ! -d "${WRKD}" ] || [ -z "${WRKD}" ]  && ex "no directory: ${WRKD}"
+if [ "${WRKD}" = "." ]
+then
+    main_index
+else
+    process_images "${WRKD}"
+    generate_zip "${WRKD}"
+    generate_html "${WRKD}"
+fi
+exit 0
