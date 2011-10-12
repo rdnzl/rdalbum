@@ -100,7 +100,7 @@ html_header() {
       div#clear { clear:both;  }
       #left img { margin-bottom:7px; }
       div#exif { margin-left:660px; background-color: #f3f3f3; padding:2px; z-index:2;}
-      pre#exif { 
+      pre#exifdata { 
             font-size: 7pt; 
             border-bottom: 1px dotted; 
             border-bottom-color: #e89222; 
@@ -208,7 +208,7 @@ generate_html() {
         HTMLFILE="${1}/${IMAGENAME}.html"
         debug "imagename: ${IMAGENAME} htmlfile: ${HTMLFILE} "
         echo "     <div class=\"thumbnail\" id=\"${IMAGENAME}\">
-                     <a href=\"${HTMLLINK}\"> <img src=\"${PREVDIR}/tn_${IMAGENAME}\"></a>
+                     <a href=\"${HTMLLINK}\"> <img src=\"${PREVDIR}/tn_${IMAGENAME}\" alt=\"${IMAGENAME}\"></a>
                      <h4><a href=\"${HTMLLINK}\">${IMAGENAME}</a></h4>
                      <p> <a href=\"${HTMLLINK}\">${PREVIEWTEXT}</a>
                      <a href=\"${IMGDIR}/${IMAGENAME}\">${DOWNLOADTEXT}</a> </p>
@@ -217,7 +217,7 @@ generate_html() {
         echo " <h2><a href=\"../\">${SITE_TITLE}</a> > <a href=\"./${INDEX}#${IMAGENAME}\">${1}</a> > ${IMAGENAME}</h2>" >>  ${HTMLFILE}
         echo " <div id=\"main\">
                   <div id=\"left\">
-                    <img src=\"${PREVDIR}/prev_${IMAGENAME}\">
+                    <img src=\"${PREVDIR}/prev_${IMAGENAME}\" alt=\"${IMAGENAME}\">
                   </div>
                   <div id=\"right\">
                           <h3><a href=\"./${INDEX}#${IMAGENAME}\">${OVERVIEWTEXT}</a></h3>
@@ -227,17 +227,17 @@ generate_html() {
                   </div>
                   <div id=\"exif\"> 
                         <h3>Exif data</h3>
-                        <pre id=\"exif\">
+                        <pre id=\"exifdata\">
                      " >>  ${HTMLFILE}
         jhead ${image} >> ${HTMLFILE}
         echo "          </pre>
                   </div>
               </div>
-</div><div id=\"clear\">
+            <div id=\"clear\"></div>
 " >> ${HTMLFILE}
         html_footer "${HTMLFILE}"
     done
-    echo "</div><div id=\"clear\">" >> ${1}/${INDEX}
+    echo "    <div id=\"clear\"></div>" >> ${1}/${INDEX}
     html_footer "${1}/${INDEX}"
 }
 
@@ -254,6 +254,8 @@ main_index() {
                 debug "ignore .dot folder: ${folder}"
                 ;;
             *)
+                folder=`basename ${folder}`
+                debug "folder: ${folder}"
                 previmg=`find ${folder}/${PREVDIR} -name "tn_*" -print | sort | head -1`
                 debug "previmg: ${previmg}"
                 [ -z "${previmg}" ] && continue
@@ -270,7 +272,7 @@ main_index() {
        <div id=\"mmain\">
          <div id=\"left\">
            <a href=\"${folder}/${INDEX}\">
-           <img src=\"${previmg}\">
+           <img src=\"${previmg}\" alt=\"${previmg}\">
            </a>
          </div>
          <div id=\"mright\">
