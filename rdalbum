@@ -59,6 +59,7 @@ TNSIZE="220"
 PREVSIZE="640"
 PREVDIR=prev
 IMGDIR=img
+SHOW_HISTOGRAM=      # set true for histogram
 
 #override VARS in .rdconfig
 
@@ -143,14 +144,7 @@ process_images() {
     debug "PROC_IMG ${1}"
     [ ! -d "${1}/${IMGDIR}" ] && ex "no image dir"
     [ ! -d "${1}/${PREVDIR}" ] && mkdir "${1}/${PREVDIR}" && debug "${1}/${PREVDIR} created"
-    #IMGLIST=`find "${1}/${IMGDIR}" -type f -print`
-    IMGLIST=`find "${1}/${IMGDIR}" -type f -exec echo "{}" \;|sort`
-    debug "${IMGLIST}"
-    if [ -z "${IMGLIST}" ]
-    then
-        ex "no files to process"
-    else
-        for file in ${IMGLIST}
+    find "${1}/${IMGDIR}" -type f -print|sort|while read file 
         do
             FILE=`basename "${file}"`
             debug "file: ${FILE}"
@@ -158,23 +152,26 @@ process_images() {
             debug "tn  : ${TNFILE}"
             PREVFILE="${1}/${PREVDIR}/prev_${FILE}"
             debug "prev: ${PREVFILE}"
-            HISTFILE="${1}/${PREVDIR}/hist_${FILE}.png"
-            debug "hist: ${HISTFILE}"
             if [ ! -f "${TNFILE}" ]
             then
                 convert -geometry ${TNSIZE} "$file" "${TNFILE}" || ex "error $*"
             else
                 debug "${TNFILE} exists"
             fi
-#            if [ ! -f "${HISTFILE}" ]
-#            then
-#                convert "$file" -define histogram:unique-colors=false \
-#                         -write histogram:mpr:hist +delete \
-#                         mpr:hist  \
-#                         "${HISTFILE}"
-#            else
-#                debug "${TNFILE} exists"
-#            fi
+            if [ ${SHOW_HISTOGRAM} ]
+            then
+                HISTFILE="${1}/${PREVDIR}/hist_${FILE}.png"
+                debug "hist: ${HISTFILE}"
+                if [ ! -f "${HISTFILE}" ]
+                then
+                    convert "$file" -define histogram:unique-colors=false \
+                          -write histogram:mpr:hist +delete \
+                          mpr:hist  \
+                          "${HISTFILE}"
+                else
+                    debug "${HISTFILE} exists"
+                fi
+            fi 
             if [ ! -f "${PREVFILE}" ]
             then
                 convert -geometry ${PREVSIZE} "$file" "${PREVFILE}"
@@ -182,16 +179,15 @@ process_images() {
                 debug "${PREVFILE} exists"
             fi
         done
-    fi
 }
 
 generate_zip() {
-    debug GEN_ZIP ${1}
+    debug GEN_ZIP "${1}"
     ZIPFILE="${1}/${1}.zip"
-    debug ${ZIPFILE}
-    if [ ! -f ${ZIPFILE} ]
+    debug "${ZIPFILE}"
+    if [ ! -f "${ZIPFILE}" ]
     then
-        zip ${ZIPFILE} ${1}/img/*
+        zip "${ZIPFILE}" "${1}"/img/*
     else
         debug "${ZIPFILE} exists"
     fi
@@ -199,21 +195,18 @@ generate_zip() {
 
 generate_html() {
     debug GEN_HTML ${1}
-    IMGLIST=`find ${1}/${IMGDIR} -type f -print|sort`
-    debug "${IMGLIST}"
     html_header "${1}/${INDEX}" "${1} ${SITE_TITLE}"
     echo "   <h2><a href=\"../\">${SITE_TITLE}</a> > ${1}</h2>" >> ${1}/${INDEX}
-#echo "<div id=\"pmain\">" >> ${1}/${INDEX}
-    for image in ${IMGLIST}
+    find "${1}/${IMGDIR}" -type f -print|sort|while read image 
     do
-        IMAGENAME=`basename ${image}`
+        IMAGENAME=`basename "${image}"`
         HTMLLINK="${IMAGENAME}.html"
         HTMLFILE="${1}/${IMAGENAME}.html"
         debug "imagename: ${IMAGENAME} htmlfile: ${HTMLFILE} "
         echo "     <div class=\"thumbnail\" id=\"${IMAGENAME}\">
                      <a href=\"${HTMLLINK}\"> <img src=\"${PREVDIR}/tn_${IMAGENAME}\" alt=\"${IMAGENAME}\"></a>
                      <h4><a href=\"${HTMLLINK}\">${IMAGENAME}</a></h4>
-                     <p> <a href=\"${HTMLLINK}\">${PREVIEWTEXT}</a>
+                     <p><a href=\"${HTMLLINK}\">${PREVIEWTEXT}</a>
                      <a href=\"${IMGDIR}/${IMAGENAME}\">${DOWNLOADTEXT}</a> </p>
                    </div>" >> ${1}/${INDEX}
         html_header "${HTMLFILE}" "${1} ${IMAGENAME}"
@@ -223,21 +216,23 @@ generate_html() {
                     <img src=\"${PREVDIR}/prev_${IMAGENAME}\" alt=\"${IMAGENAME}\">
                   </div>
                   <div id=\"right\">
-                          <h3><a href=\"./${INDEX}#${IMAGENAME}\">${OVERVIEWTEXT}</a></h3>
-                          <p id=\"text\">
-                        <br><a href=\"${IMGDIR}/${IMAGENAME}\">${DOWNLOADTEXT}</a>
-                            </p> 
+                     <h3><a href=\"./${INDEX}#${IMAGENAME}\">${OVERVIEWTEXT}</a></h3>
+                     <p id=\"text\"><a href=\"${IMGDIR}/${IMAGENAME}\">${DOWNLOADTEXT}</a></p> 
                   </div>
                   <div id=\"exif\"> 
                         <h3>Exif data</h3>
                         <pre id=\"exifdata\">
                      " >>  ${HTMLFILE}
-        jhead ${image} >> ${HTMLFILE}
-        echo "          </pre>
-                  </div>
+        jhead "${image}" >> ${HTMLFILE}
+        echo "          </pre> " >> ${HTMLFILE}
+        if [ ${SHOW_HISTOGRAM} ]
+        then
+            echo " <h3>Histogram</h3>
+                   <img src=\"${PREVDIR}/hist_${IMAGENAME}.png\" alt=\"${IMAGENAME}\"> " >> ${HTMLFILE}
+        fi
+            echo " </div>
               </div>
-            <div id=\"clear\"></div>
-" >> ${HTMLFILE}
+            <div id=\"clear\"></div> " >> ${HTMLFILE}
         html_footer "${HTMLFILE}"
     done
     echo "    <div id=\"clear\"></div>" >> ${1}/${INDEX}
@@ -247,29 +242,27 @@ generate_html() {
 main_index() {
     debug MAIN_INDEX
     html_header "./${INDEX}" "${SITE_TITLE}"
-    DIRLIST=`find . -maxdepth 1 -type d -print|xargs ls -1rtd`
-    debug "${DIRLIST}"
     echo "   <h2>${SITE_TITLE}</h2>" >> ${INDEX}
-    for folder in ${DIRLIST}
+    find . -maxdepth 1 -type d -print|while read folder
     do
-        case ${folder} in
+        case "${folder}" in
             .*git|.)
                 debug "ignore .dot folder: ${folder}"
                 ;;
             *)
-                folder=`basename ${folder}`
+                folder=`basename "${folder}"`
                 debug "folder: ${folder}"
-                previmg=`find ${folder}/${PREVDIR} -name "tn_*" -print | sort | head -1`
+                previmg=`find "${folder}/${PREVDIR}" -name "tn_*" -print | sort | head -1`
                 debug "previmg: ${previmg}"
                 [ -z "${previmg}" ] && continue
-                topimg=`find ${folder}/${IMGDIR} -type f -print | sort | head -1`
-                createtime=`/usr/bin/stat -f "%Sc" ${topimg}`
-                modtime=`/usr/bin/stat -f "%Sm" ${topimg}`
+                topimg=`find "${folder}/${IMGDIR}" -type f -print | sort | head -1`
+                createtime=`/usr/bin/stat -f "%Sc" "${topimg}"`
+                modtime=`/usr/bin/stat -f "%Sm" "${topimg}"`
                 debug "topimg create: ${createtime} ${topimg}"
                 debug "topimg mod: ${modtime} ${topimg}"
-                imgcount=`ls -1 ${folder}/${IMGDIR} | /usr/bin/wc -l`
+                imgcount=`ls -1 "${folder}/${IMGDIR}" | /usr/bin/wc -l`
                 debug "count: $imgcount"
-                zipsize=`ls -lh ${folder}/${folder}.zip|awk '{print $5}'`
+                zipsize=`ls -lh "${folder}/${folder}".zip|awk '{print $5}'`
                 debug "zip: $zipsize"
                 echo " \
        <div id=\"mmain\">
