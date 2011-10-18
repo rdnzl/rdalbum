@@ -158,7 +158,7 @@ process_images() {
             debug "tn  : ${TNFILE}"
             PREVFILE="${1}/${PREVDIR}/prev_${FILE}"
             debug "prev: ${PREVFILE}"
-            HISTFILE="${1}/${PREVDIR}/hist_${FILE}"
+            HISTFILE="${1}/${PREVDIR}/hist_${FILE}.png"
             debug "hist: ${HISTFILE}"
             if [ ! -f "${TNFILE}" ]
             then
@@ -166,12 +166,15 @@ process_images() {
             else
                 debug "${TNFILE} exists"
             fi
-            if [ ! -f "${HISTFILE}" ]
-            then
-                convert "$file" -define histogram:unique-colors=false histogram:"${HISTFILE}"
-            else
-                debug "${TNFILE} exists"
-            fi
+#            if [ ! -f "${HISTFILE}" ]
+#            then
+#                convert "$file" -define histogram:unique-colors=false \
+#                         -write histogram:mpr:hist +delete \
+#                         mpr:hist  \
+#                         "${HISTFILE}"
+#            else
+#                debug "${TNFILE} exists"
+#            fi
             if [ ! -f "${PREVFILE}" ]
             then
                 convert -geometry ${PREVSIZE} "$file" "${PREVFILE}"
